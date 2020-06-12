@@ -34,3 +34,11 @@ class pvasset(Non_Dispatchable):
     Capacity : PV capacity, kWh
     Install_cost : install cost per kWh, £
     """
+
+    def __init__(self, capacity, install_cost=0):
+        super().__init__()  # calls the parent class' __init__()
+        self.capacity = capacity
+        self.install_cost = install_cost
+
+    def getoutput():
+        
