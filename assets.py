@@ -9,7 +9,7 @@ import numpy as np
 
 class Non_Dispatchable:
     """ Non Dispatchable base class """
-    
+
     def __init__(self):
         self.dispatch_type = "Non-Dispatchable"
         self.install_cost = 0
@@ -24,6 +24,7 @@ class Dispatchable:
         self.install_cost = 0
         self.lifetime = 20
 
+
 class pvasset(Non_Dispatchable):
     """ 
     PV asset class 
@@ -31,4 +32,5 @@ class pvasset(Non_Dispatchable):
     Input
     --------
     Capacity : PV capacity, kWh
-    
+    Install_cost : install cost per kWh, £
+    """
