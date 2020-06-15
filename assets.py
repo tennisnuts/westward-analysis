@@ -31,14 +31,25 @@ class pvasset(Non_Dispatchable):
 
     Input
     --------
-    Capacity : PV capacity, kWh
-    Install_cost : install cost per kWh, £
+    Capacity : float
+        PV capacity, kWh
+
+    Install_cost : float
+        install cost per kWh, £
     """
 
     def __init__(self, capacity, install_cost=0):
-        super().__init__()  # calls the parent class' __init__()
+        super().__init__()  # calls the parent class's __init__()
         self.capacity = capacity
         self.install_cost = install_cost
 
-    def getoutput():
-        
+    def getoutput(self, dt, irradiance):  # call irradiance from the function.
+        """
+        Input
+        ------
+        dt : float
+            Time interval, Hours
+
+        irradiance : numpy array, len=25
+            irradiance for the day
+        """
