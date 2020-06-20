@@ -135,8 +135,8 @@ class pvasset(Non_Dispatchable):
     ---------------------------------------------------------------------------------------------------------------------------------
     """
     # correct HOMER
-    def get_declination_angle(self):
-        time = datetime.datetime.now()
+    def get_declination_angle(self, time):
+        # time = datetime.datetime.now()
         year = time.year
         month = time.month
         day = time.day
@@ -149,8 +149,8 @@ class pvasset(Non_Dispatchable):
         return declination_angle
 
     # correct HOMER
-    def get_hour_angle(self):
-        time = datetime.datetime.now()
+    def get_hour_angle(self, time):
+        # time = datetime.datetime.now()
         year = time.year
         month = time.month
         day = time.day
@@ -171,10 +171,10 @@ class pvasset(Non_Dispatchable):
         return hour_angle
 
     # Correct HOMER
-    def get_solar_zenith_angle(self):
+    def get_solar_zenith_angle(self, time):
         latitude = math.radians(self.latitude)
-        declination = math.radians(self.get_declination_angle())
-        hour_angle = math.radians(self.get_hour_angle())
+        declination = math.radians(self.get_declination_angle(time))
+        hour_angle = math.radians(self.get_hour_angle(time))
         zenith_angle = math.acos(
             math.cos(latitude) * math.cos(declination) * math.cos(hour_angle)
             + math.sin(latitude) * math.sin(declination)
@@ -183,12 +183,12 @@ class pvasset(Non_Dispatchable):
         return zenith_angle
 
     # correct HOMER
-    def get_incidence_angle(self):
+    def get_incidence_angle(self, time):
         tilt = math.radians(self.tilt)
         pv_azimuth = math.radians(self.azimuth_pv)
         latitude = math.radians(self.latitude)
-        declination = math.radians(self.get_declination_angle())
-        hour_angle = math.radians(self.get_hour_angle())
+        declination = math.radians(self.get_declination_angle(time))
+        hour_angle = math.radians(self.get_hour_angle(time))
 
         incidence = math.acos(
             math.sin(declination) * math.sin(latitude) * math.cos(tilt)
@@ -213,59 +213,76 @@ class pvasset(Non_Dispatchable):
         incidence = math.degrees(incidence)
         return incidence
 
-    def get_G_d_t(self, G_d_horizontal):
-        incidence_angle = math.radians(self.get_incidence_angle())
-        zenith_angle = math.radians(self.get_solar_zenith_angle())
-        G_d_t = math.cos(incidence_angle) / math.cos(zenith_angle) * G_d_horizontal
-        # declination_angle = math.radians(self.get_declination_angle())
-        # latitude = math.radians(self.latitude)
-        # tilt = math.radians(self.tilt)
-        # hour_angle = math.radians(self.get_hour_angle())
-        # R_d_t = (
-        #     math.sin(declination_angle) * math.sin(latitude - tilt)
-        #     + math.cos(declination_angle) * math.cos(latitude - tilt)
-        # ) / (
-        #     math.sin(declination_angle) * math.sin(latitude)
-        #     + math.cos(declination_angle) * math.cos(latitude) * math.cos(hour_angle)
-        # )
-        # G_d_t = R_d_t * 1  # G_d_horizontal
-        # tilt = math.radians(self.tilt)
-        # zenith = math.radians(self.get_solar_zenith_angle())
-        # solar_azimuth = math.radians(self.get_solar_azimuth_angle())
-        # pv_azimuth = math.radians(self.azimuth_pv)
+    def split_G(self, G_g_horizontal, clearness_index):
+        if clearness_index <= 0.22:
+            G_df_horizontal = (1 - 0.09 * clearness_index) * G_g_horizontal
+            G_d_horisontal = G_g_horizontal - G_df_horizontal
+        elif clearness_index > 0.22 and clearness_index <= 0.8:
+            G_df_horizontal = (
+                0.9511
+                - 0.1604 * clearness_index
+                + 4.388 * (clearness_index ** 2)
+                - 16.638 * (clearness_index ** 3)
+                + 12.336 * (clearness_index ** 4)
+            ) * G_g_horizontal
+            G_d_horisontal = G_g_horizontal - G_df_horizontal
+        else:
+            G_df_horizontal = 0.165 * G_g_horizontal
+            G_d_horisontal = G_g_horizontal - G_df_horizontal
+        return G_d_horisontal, G_df_horizontal
 
-        # if (tilt - zenith)<math.pi/2 && (solar_azimuth - pv_azimuth)
-        # G_d_t = math.cos(tilt - zenith) * math.cos(solar_azimuth - )
+    def get_G_d_t(self, time, G_g_horizontal, clearness_index):
+        incidence_angle = math.radians(self.get_incidence_angle(time))
+        zenith_angle = math.radians(self.get_solar_zenith_angle(time))
+        G_d_horizontal, G_df_horizontal = self.split_G(G_g_horizontal, clearness_index)
+
+        if (
+            incidence_angle < math.radians(90)
+            and zenith_angle < math.radians(90)
+            and G_g_horizontal > 2
+        ):
+            R_d_t = math.cos(incidence_angle) / math.cos(
+                zenith_angle
+            )  # * G_d_horizontal
+        else:
+            R_d_t = 0
+        if R_d_t < 12:
+            R_d_t = R_d_t
+        else:
+            R_d_t = 0
+        G_d_t = R_d_t * G_d_horizontal
         return G_d_t
 
-    def get_G_df_t(self, G_df_horizontal):
+    def get_G_df_t(self, G_g_horizontal, clearness_index):
+        G_d_horizontal, G_df_horizontal = self.split_G(G_g_horizontal, clearness_index)
         G_df_t = 0.5 * (1 + math.cos(math.radians(self.tilt))) * G_df_horizontal
         return G_df_t
 
-    def get_G_aniso_df_t(self, G_d_horizontal, G_df_horizontal):
-        solar_zenith_angle = self.get_solar_zenith_angle()
-        incidence_angle = self.get_incidence_angle()
-        time = datetime.datetime.now()
-        year = time.year
-        month = time.month
-        day = time.day
-        day_of_year = (
-            datetime.date(year, month, day) - datetime.date(year, 1, 1)
-        ).days + 1
-        G_ext = (
-            1367
-            * (1 + 0.033 * math.cos(math.radians((2 * math.pi * day_of_year) / 365)))
-            * math.cos(math.radians(solar_zenith_angle))
-        )
-        Ai = G_d_horizontal / (G_ext * math.cos(math.radians(solar_zenith_angle)))
-        R_d = math.cos(math.radians(incidence_angle)) / math.cos(
-            math.radians(solar_zenith_angle)
-        )
-        R_aniso_df_t = (
-            0.5 * (1 - Ai) * (1 + math.cos(math.radians(self.tilt))) + Ai * R_d
-        )
-        G_aniso_df_t = R_aniso_df_t * G_df_horizontal
-        return G_aniso_df_t
+    # uncorrected
+    # def get_G_aniso_df_t(self, time, G_d_horizontal, G_df_horizontal):
+    #     solar_zenith_angle = math.radians(self.get_solar_zenith_angle(time))
+    #     incidence_angle = math.radians(self.get_incidence_angle(time))
+    #     # time = datetime.datetime.now()
+    #     year = time.year
+    #     month = time.month
+    #     day = time.day
+    #     day_of_year = (
+    #         datetime.date(year, month, day) - datetime.date(year, 1, 1)
+    #     ).days + 1
+    #     G_ext = (
+    #         1367
+    #         * (1 + 0.033 * math.cos(math.radians((2 * math.pi * day_of_year) / 365)))
+    #         * math.cos(math.radians(solar_zenith_angle))
+    #     )
+    #     Ai = G_d_horizontal / (G_ext * math.cos(math.radians(solar_zenith_angle)))
+    #     R_d = math.cos(math.radians(incidence_angle)) / math.cos(
+    #         math.radians(solar_zenith_angle)
+    #     )
+    #     R_aniso_df_t = (
+    #         0.5 * (1 - Ai) * (1 + math.cos(math.radians(self.tilt))) + Ai * R_d
+    #     )
+    #     G_aniso_df_t = R_aniso_df_t * G_df_horizontal
+    #     return G_aniso_df_t
 
     # seems correct
     def get_G_r_t(self, G_g_horizontal):
@@ -273,17 +290,19 @@ class pvasset(Non_Dispatchable):
         G_r_t = R_r * self.albedo * G_g_horizontal
         return G_r_t
 
-    def get_G_g_t(self, G_d_horizontal, G_df_horizontal, G_g_horizontal):
+    def get_G_g_t(self, time, G_g_horizontal, clearness_index):
+        # G_d_horizontal, G_df_horizontal = self.split_G(G_g_horizontal, clearness_index)
         G_g_t = (
-            self.get_G_d_t(G_d_horizontal)
-            + self.get_G_df_t(G_df_horizontal)
+            self.get_G_d_t(time, G_g_horizontal, clearness_index)
+            + self.get_G_df_t(G_g_horizontal, clearness_index)
             + self.get_G_r_t(G_g_horizontal)
         )
         return G_g_t
 
-    def get_G_absorbed(self, G_d_horizontal, G_df_horizontal, G_g_horizontal):
+    def get_G_absorbed(self, time, G_g_horizontal, clearness_index):
+        # G_d_horizontal, G_df_horizontal = self.split_G(G_g_horizontal, clearness_index)
         G_absorbed = (
-            self.get_G_g_t(G_d_horizontal, G_df_horizontal, G_g_horizontal)
+            self.get_G_g_t(time, G_g_horizontal, clearness_index)
             * 0.9  # 0.9 = absorbtion coeff approximation widely used
         )
         return G_absorbed
@@ -294,10 +313,10 @@ class pvasset(Non_Dispatchable):
     """
     # correct
     def get_cell_temp(
-        self, air_temp, G_d_horizontal, G_df_horizontal, G_g_horizontal, wind_velocity
+        self, time, air_temp, G_g_horizontal, clearness_index, wind_velocity,
     ):
         G_g_t = self.get_G_g_t(
-            G_d_horizontal, G_df_horizontal, G_g_horizontal
+            time, G_g_horizontal, clearness_index
         )  # can change if model is wrong to the absorbed version
         cell_temp = air_temp + (G_g_t / self.G_g_NOCT) * (
             9.5 / (5.7 + 3.8 * wind_velocity)
@@ -312,20 +331,25 @@ class pvasset(Non_Dispatchable):
     """
     # correct
     def get_module_eff(
-        self, air_temp, G_d_horizontal, G_df_horizontal, G_g_horizontal, wind_velocity
+        self, time, air_temp, G_g_horizontal, clearness_index, wind_velocity,
     ):
         cell_temp = self.get_cell_temp(
-            air_temp, G_d_horizontal, G_df_horizontal, G_g_horizontal, wind_velocity
+            time, air_temp, G_g_horizontal, clearness_index, wind_velocity,
         )
-        G_g_t = self.get_G_absorbed(G_d_horizontal, G_df_horizontal, G_g_horizontal)
-        eff = self.reference_module_efficiency * (
-            1
-            - self.temp_coeff * (cell_temp - 25)
-            + self.insolation_coeff
-            * math.log(
-                G_g_t / 1000
-            )  # 25 and 1000 are stc values for temp and irradiance
-        )
+        G_g_t = self.get_G_absorbed(time, G_g_horizontal, clearness_index)
+        if G_g_t > 0:
+            eff = self.reference_module_efficiency * (
+                1
+                - self.temp_coeff * (cell_temp - 25)
+                + self.insolation_coeff
+                * math.log(
+                    G_g_t / 1000
+                )  # 25 and 1000 are stc values for temp and irradiance
+            )
+        else:
+            eff = (
+                self.reference_module_efficiency
+            )  # could be any number it doesnt matter
         return eff
 
     """
@@ -334,17 +358,14 @@ class pvasset(Non_Dispatchable):
     """
     # correct
     def get_output(
-        self, air_temp, G_d_horizontal, G_df_horizontal, G_g_horizontal, wind_velocity
+        self, time, air_temp, G_g_horizontal, clearness_index, wind_velocity,
     ):
         eff = self.get_module_eff(
-            air_temp, G_d_horizontal, G_df_horizontal, G_g_horizontal, wind_velocity
+            time, air_temp, G_g_horizontal, clearness_index, wind_velocity,
         )
-        G_absorbed = self.get_G_absorbed(
-            G_d_horizontal, G_df_horizontal, G_g_horizontal
-        )
-        G_absorbed = 700
+        G_absorbed = self.get_G_absorbed(time, G_g_horizontal, clearness_index)
         T_c = self.get_cell_temp(
-            air_temp, G_d_horizontal, G_df_horizontal, G_g_horizontal, wind_velocity
+            time, air_temp, G_g_horizontal, clearness_index, wind_velocity,
         )
         pv_power = (
             eff * G_absorbed * (1 - self.T_coeff_P * (T_c - 25)) * self.area
