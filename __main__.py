@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import Assets
+import assets
 import datetime
 import pandas as pd
 import math
@@ -23,7 +23,7 @@ insolation_coeff = 0.12
 T_coeff_P = -0.36 / 100
 area = 12 * 1.62 * 0.98
 
-pv1_asset = Assets.pvasset(
+pv1_asset = assets.pvasset(
     tilt,
     azimuth_pv,
     latitude,
@@ -43,7 +43,7 @@ pv1_asset = Assets.pvasset(
 
 area = 12 * 1.62 * 0.98
 azimuth_pv = -90
-pv2_asset = Assets.pvasset(
+pv2_asset = assets.pvasset(
     tilt,
     azimuth_pv,
     latitude,
@@ -63,7 +63,7 @@ pv2_asset = Assets.pvasset(
 area = 12 * 1.62 * 0.98
 azimuth_pv = 0
 tilt = 30
-pv3_asset = Assets.pvasset(
+pv3_asset = assets.pvasset(
     tilt,
     azimuth_pv,
     latitude,
@@ -133,7 +133,7 @@ Load.columns = ["Load"]
 wind = df1["wind_speed"]
 df = df.join(wind)
 df = df.join(Load)
-df2 = df.resample("0.25H").mean()
+df2 = df.resample("1H").mean()
 dataframe = df2.interpolate()
 dataframe["clearness_index"] = (
     dataframe["radiation_surface"] / dataframe["radiation_toa"]
@@ -168,18 +168,10 @@ for it in range(len(dataframe)):
     total[it] = pv1_output[it] + pv2_output[it] + pv3_output[it]
     Net[it] = load - total[it]
 
-    if Net[it] > 0:
-        Expenditure[it] = Net[it] * 0.25 * 0.13 / 1000
-    else:
-        Income[it] = Net[it] * 0.25 * 0.15 / 1000 * -1
 
-print("Expenditure without battery = £" + str(Expenditure.sum()))
-print("Income without battery = £" + str(Income.sum()))
-print("Profit without battery = £" + str(Income.sum() - Expenditure.sum()) + "\n\n")
-
-capacity = 5000
-power = 2500
-eff = 1
+capacity = 20000
+power = 10000
+eff = 0.9
 
 soc = np.zeros(len(dataframe))
 output = np.zeros(len(dataframe))
@@ -192,31 +184,29 @@ for j in range(len(dataframe)):
 
     if Net[j] > 0:  # use battery
         output[j] = min(power, Net[j], eff * soc_temp)
-        soc[j] = soc_temp - (1 / eff) * output[j] * 0.25
+        soc[j] = soc_temp - (1 / eff) * output[j] * 1
     elif Net[j] < 0:  # charge battery
         output[j] = max(-power, Net[j], -(1 / eff) * (capacity - soc_temp))
-        soc[j] = soc_temp - eff * output[j] * 0.25
+        soc[j] = soc_temp - eff * output[j] * 1
     elif Net[j] == 0:  # do nothing
         soc[j] = soc_temp
         output[j] = 0
 
 net_battery = Net - output
-for it in range(len(dataframe)):
-    if net_battery[it] > 0:
-        Expenditure[it] = net_battery[it] * 0.25 * 0.13 / 1000
-    else:
-        Income[it] = net_battery[it] * 0.25 * 0.15 / 1000 * -1
 
-print("Expenditure with battery = £" + str(Expenditure.sum()))
-print("Income with battery = £" + str(Income.sum()))
-print("Profit with battery = £" + str(Income.sum() - Expenditure.sum()) + "\n\n")
 
-print("Annual Savings = £" + str(Income.sum() - Expenditure.sum() - 548))
+import_battery = np.zeros(len(dataframe))
+import_nobat = np.zeros(len(dataframe))
+for n in range(len(dataframe)):
+    if net_battery[n] > 0:
+        import_battery[n] = net_battery[n]
+    if Net[n] > 0:
+        import_nobat[n] = Net[n]
 
-print(output.sum())
+print(import_battery.sum() * 0.13 / 1000)
+print(import_nobat.sum() * 0.13 / 1000)
 
-fig, ax = plt.subplots()
-
-# ax.plot(Net)
-ax.plot(net_battery)
+fig, ax = plt.subplots(2)
+ax[0].plot(net_battery[0 : 24 * 4])
+ax[1].plot(Net[0 : 24 * 4])
 plt.show()
